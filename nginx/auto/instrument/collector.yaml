@@ -1,0 +1,72 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: appdynamics-custom
+spec:
+  image: docker.io/chrlic/otelcol-dev:0.112.0
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+      resource:
+        attributes:
+        - key: appdynamics.controller.account
+          action: upsert
+          value: "<CONTROLLER-ACCOUNT>"
+        - key: appdynamics.controller.host
+          action: upsert     
+          value: "<CONTROLLER-HOSTNAME>"
+        - key: appdynamics.controller.port
+          action: upsert
+          value: 443
+    exporters:
+      debug:
+        verbosity: detailed
+      # This part says that the opentelemetry collector will send data to OTIS pipeline for AppDynamicas CSaaS.
+      otlphttp:
+        tls:
+          insecure: true
+        endpoint: "<CONTROLLER-OTEL-ENDPOINT>"
+        headers: {"x-api-key": "<CONTROLLER-OTEL-API-KEY>"}
+      appdynamics:
+        metrics: {}
+        analytics:
+          url: "<CONTROLLER-EVENT-SERVICE-URL>"
+          globalAccountName: "<CONTROLLER-GLOBAL-ACCOUNT-NAME>"
+          apiKey: "<CONTROLLER-EVENT-SERVICE-API-KEY>"
+          metricsTable: mdotelmetrics
+          logsTable: mdotellogs
+          initTable: false
+    connectors:
+      spanmetrics:
+        histogram:
+          disable: false
+          explicit:
+            buckets: [2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]
+        dimensions:
+        - name: http.method
+          default: GET
+        exemplars:
+          enabled: false
+        # exclude_dimensions: ['status.code']
+        dimensions_cache_size: 1000
+        aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"    
+        metrics_flush_interval: 60s
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [debug, otlphttp, spanmetrics]
+        metrics:
+          receivers: [spanmetrics]
+          exporters: [debug, appdynamics]
+      telemetry:
+        logs:
+          level: "debug"

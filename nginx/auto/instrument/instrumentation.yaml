@@ -1,0 +1,21 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: nginx1-instrumentation
+spec:
+  exporter:
+    endpoint: http://appdynamics-custom-collector:4317
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  sampler:
+    type: parentbased_always_on
+  nginx:
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://appdynamics-custom-collector:4318
+    attrs:
+      # Following value will be AppD application name it OTEL traces sent to AppD controller
+      - name: NginxModuleServiceNamespace
+        value: Nginx1
