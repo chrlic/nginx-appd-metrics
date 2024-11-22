@@ -1,7 +1,7 @@
 
-## Instrumenting Nginx with the OpenTelemetry operator
+# Getting Nginx metrics into AppDynamics
 
-https://github.com/open-telemetry/opentelemetry-operator
+## Instrumenting Nginx with the OpenTelemetry operator
 
 ### Install OpenTelemetry Operator using Helm
 
@@ -28,19 +28,21 @@ The values.yaml file is modified to enable Nginx instrumentation via a feature f
 
 At this point, there should be a deployment *opentelemetry-operator* in the namespace *opentelemetry* with associated pod like *opentelemetry-operator-785bbd55fd-gff8f*.
 
+See also documentation at https://github.com/open-telemetry/opentelemetry-operator
+
 ### Start the OpenTelemetry collector
 
 OpenTelemetry collector can be started standalone, but the easier method is using OpenTelemetry Operator to handle the collectors lifecycle. In the directory `nginx/auto/instrument` is a file `collector.yaml` with an example how to run a collector with all the features we need, i.e. getting metrics out of Nginx traces and sending them to AppDynamics event service (Analytics).
 
 There are following parameters in the `collector.yaml` file that need to be changed based on the target AppDynamiccs controller environment:
 
-* <CONTROLLER-ACCOUNT> - typically something like *company* in front of .saas.appdynamics.com
-* <CONTROLLER-HOSTNAME> - typically something like *company.saas.appdynamics.com*
-* <CONTROLLER-OTEL-ENDPOINT> - something like https://fra-sls-agent-api.saas.appdynamics.com, the correct URL for the target controller can be found on the OTel tab under Configuration submenu and then under Exporters tab on the *Configure OpenTelemetry collector for AppDynamics* screen.
-* <CONTROLLER-OTEL-API-KEY> - on the same screen as above, on the bottom, there's a *Access Key* section. Click the *Show* button to get the access key value
-* <CONTROLLER-EVENT-SERVICE-URL> - something like https://fra-ana-api.saas.appdynamics.com, the correct value depends on the AWS hosting site of the controller. The URL for the target controller can be found in the documentation at [Saas IP ranges](https://docs.appdynamics.com/appd/24.x/24.11/en/cisco-appdynamics-essentials/getting-started/saas-domains-and-ip-ranges), look for *Analytics*
-* <CONTROLLER-GLOBAL-ACCOUNT-NAME> - this can be found in the controller under Settings (now under user login icon) -> Admin -> License - tab Account (on the top line), field *Global Account Name*
-* <CONTROLLER-EVENT-SERVICE-API-KEY> - this needs to be likely created in the target controller. Go to Analytics -> Configuration -> API Keys tab. Click *Add* button, give the key a name and optionally description. Then assign appropriate access rights to the key. Select *Custom Analytics Events Permissions* and select all three boxes: *Can Manage Schema*, *Can Query all Custom Analytics Events*, *Can Publish all Custom Analytics Events*. Once you click the *Create* button, API Key will be displayed. This is the value you need. Before closing the window with the API key displayed, make sure you have copied the value. It will not be accessible again, new key would have to be created.
+* `<CONTROLLER-ACCOUNT>` - typically something like *company* in front of .saas.appdynamics.com
+* `<CONTROLLER-HOSTNAME>` - typically something like *company.saas.appdynamics.com*
+* `<CONTROLLER-OTEL-ENDPOINT>` - something like https://fra-sls-agent-api.saas.appdynamics.com, the correct URL for the target controller can be found on the OTel tab under Configuration submenu and then under Exporters tab on the *Configure OpenTelemetry collector for AppDynamics* screen.
+* `<CONTROLLER-OTEL-API-KEY>` - on the same screen as above, on the bottom, there's a *Access Key* section. Click the *Show* button to get the access key value
+* `<CONTROLLER-EVENT-SERVICE-URL>` - something like https://fra-ana-api.saas.appdynamics.com, the correct value depends on the AWS hosting site of the controller. The URL for the target controller can be found in the documentation at [Saas IP ranges](https://docs.appdynamics.com/appd/24.x/24.11/en/cisco-appdynamics-essentials/getting-started/saas-domains-and-ip-ranges), look for *Analytics*
+* `<CONTROLLER-GLOBAL-ACCOUNT-NAME>` - this can be found in the controller under Settings (now under user login icon) -> Admin -> License - tab Account (on the top line), field *Global Account Name*
+* `<CONTROLLER-EVENT-SERVICE-API-KEY>` - this needs to be likely created in the target controller. Go to Analytics -> Configuration -> API Keys tab. Click *Add* button, give the key a name and optionally description. Then assign appropriate access rights to the key. Select *Custom Analytics Events Permissions* and select all three boxes: *Can Manage Schema*, *Can Query all Custom Analytics Events*, *Can Publish all Custom Analytics Events*. Once you click the *Create* button, API Key will be displayed. This is the value you need. Before closing the window with the API key displayed, make sure you have copied the value. It will not be accessible again, new key would have to be created.
 
 At this stage, time interval buckets can be also modified if needed.
 
@@ -68,7 +70,7 @@ To instrument Nginx, there are two things to do:
 Sample Instrumentation resource is located at `nginx/auto/instrument/instrumentation.yaml`. There are a few items needing adjustment:
 
 * *metadata.name* - this is the name of the object, which will later be referred to in the Nginx pod annotation
-* *spec.exporter.endpoint* - this is the default URL of the OpenTelemetry collector Kubernetes service deployed earlier. If the collector runs in the same namenspace as the monitored Nginx, it can use the simple service names as in the example. If it runs in a different namespace, then the FQDN should have format <otel-collector-service-name>.<namespace-of-the-collector>.svc.cluster.local
+* *spec.exporter.endpoint* - this is the default URL of the OpenTelemetry collector Kubernetes service deployed earlier. If the collector runs in the same namenspace as the monitored Nginx, it can use the simple service names as in the example. If it runs in a different namespace, then the FQDN should have format `<otel-collector-service-name>.<namespace-of-the-collector>.svc.cluster.local`
 * *spec.nginx.env* with name *OTEL_EXPORTER_OTLP_ENDPOINT* should use the same service URL as above, just the port 4318
 * *spec.nginx.attrs* with name *NginxModuleServiceNamespace* should be set to the application name as it should appear in AppDynamics. Tier name will be set to the deployment name of the Nginx automatically and can be overridden by setting attribute *NginxModuleServiceName*.
 
@@ -121,7 +123,9 @@ Access to the data is via ADQL queries and their visual representations.
 
 To access the request counts, error counts, and response times, use query like:
 
-`SELECT series(metricTimestamp, '1m') AS "Time", lbl_span_name AS "Location", avg(metricValue) AS "ResponseTime (ms)" FROM mdotelmetrics WHERE scp_name = "spanmetricsconnector" and metricName = "traces.span.metrics.avgDuration" and lbl_span_name LIKE "/api/*"`
+~~~
+SELECT series(metricTimestamp, '1m') AS "Time", lbl_span_name AS "Location", avg(metricValue) AS "ResponseTime (ms)" FROM mdotelmetrics WHERE scp_name = "spanmetricsconnector" and metricName = "traces.span.metrics.avgDuration" and lbl_span_name LIKE "/api/*"
+~~~
 
 field *metricName* can be:
 
@@ -134,7 +138,9 @@ The field *lbl_span_name* corresponds to the name of the location directive in t
 
 To get histogram of response times over a time period, use ADQL query like:
 
-`SELECT bucket AS "Response Time (ms)", lbl_span_name AS "Service", sum(metricValue) AS "Number of Requests" FROM mdotelmetrics WHERE scp_name = "spanmetricsconnector" and metricName = "traces.span.metrics.duration" and lbl_span_name LIKE "/*"` 
+~~~
+SELECT bucket AS "Response Time (ms)", lbl_span_name AS "Service", sum(metricValue) AS "Number of Requests" FROM mdotelmetrics WHERE scp_name = "spanmetricsconnector" and metricName = "traces.span.metrics.duration" and lbl_span_name LIKE "/*"
+~~~
 
 and choose vertical bar chart visualisation
 
