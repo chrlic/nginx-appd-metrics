@@ -32,8 +32,12 @@ See also documentation at https://github.com/open-telemetry/opentelemetry-operat
 
 ### Start the OpenTelemetry collector
 
-OpenTelemetry collector can be started standalone, but the easier method is using OpenTelemetry Operator to handle the collectors lifecycle. In the directory `nginx/auto/instrument` is a file `collector.yaml` with an example how to run a collector with all the features we need, i.e. getting metrics out of Nginx traces and sending them to AppDynamics event service (Analytics).
+#### Prepare the collector configuration
 
+OpenTelemetry collector can be started standalone, but the easier method is using OpenTelemetry Operator to handle the collectors lifecycle. In the directory `nginx/auto/instrument` is a file `collector.yaml` and `collector-metrics-only.yaml` respectively with an example how to run a collector with all the features we need, i.e. getting metrics out of Nginx traces and sending them to AppDynamics event service (Analytics).
+
+1) If you need both traces and metrics (requires OTel ingestion on AppDynamics controller side)
+   
 There are following parameters in the `collector.yaml` file that need to be changed based on the target AppDynamiccs controller environment:
 
 * `<CONTROLLER-ACCOUNT>` - typically something like *company* in front of .saas.appdynamics.com
@@ -46,10 +50,29 @@ There are following parameters in the `collector.yaml` file that need to be chan
 
 At this stage, time interval buckets can be also modified if needed.
 
-With all the changes done to `collector.yaml`, OpenTelemetry collector can be started by a command in an appropriate namespace: 
+2) If you need metrics only (does NOT require OTel ingestion on AppDynamics controller side)
+
+There are following parameters in the `collector-metrics-only.yaml` file that need to be changed based on the target AppDynamiccs controller environment:
+
+* `<CONTROLLER-EVENT-SERVICE-URL>` - something like https://fra-ana-api.saas.appdynamics.com, the correct value depends on the AWS hosting site of the controller. The URL for the target controller can be found in the documentation at [Saas IP ranges](https://docs.appdynamics.com/appd/24.x/24.11/en/cisco-appdynamics-essentials/getting-started/saas-domains-and-ip-ranges), look for *Analytics*
+* `<CONTROLLER-GLOBAL-ACCOUNT-NAME>` - this can be found in the controller under Settings (now under user login icon) -> Admin -> License - tab Account (on the top line), field *Global Account Name*
+* `<CONTROLLER-EVENT-SERVICE-API-KEY>` - this needs to be likely created in the target controller. Go to Analytics -> Configuration -> API Keys tab. Click *Add* button, give the key a name and optionally description. Then assign appropriate access rights to the key. Select *Custom Analytics Events Permissions* and select all three boxes: *Can Manage Schema*, *Can Query all Custom Analytics Events*, *Can Publish all Custom Analytics Events*. Once you click the *Create* button, API Key will be displayed. This is the value you need. Before closing the window with the API key displayed, make sure you have copied the value. It will not be accessible again, new key would have to be created.
+
+At this stage, time interval buckets can be also modified if needed.
+
+#### Deploying the collector
+
+
+With all the changes done to `collector.yaml` or `collector-metrics-only.yaml`, OpenTelemetry collector can be started by a command in an appropriate namespace: 
 
 ~~~
 kubectl -nnamespace apply -f nginx/auto/instrument/collector.yaml
+~~~
+
+or 
+
+~~~
+kubectl -nnamespace apply -f nginx/auto/instrument/collector-metrics-only.yaml
 ~~~
 
 Namespace might be any namespace, usually in the opentelemetry namespace or in the namespace of the application. The collector is published via a service and the URL of the service will be part of the configuration of the Instrumentation as described below in the guide. 
