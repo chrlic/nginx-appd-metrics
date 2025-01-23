@@ -1,6 +1,10 @@
 
 # Getting Nginx metrics into AppDynamics
 
+## Instrumenting Nginx manually
+
+Manual process of instrumentation is described in the [MANUAL.md](MANUAL.md)
+
 ## Instrumenting Nginx with the OpenTelemetry operator
 
 ### Install OpenTelemetry Operator using Helm

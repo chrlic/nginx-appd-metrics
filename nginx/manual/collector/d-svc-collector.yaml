@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: appdynamics-custom-collector-config
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+    exporters:
+      debug:
+        verbosity: detailed
+      # This part says that the opentelemetry collector will send data to OTIS pipeline for AppDynamicas CSaaS.
+      appdynamics:
+        metrics: {}
+        analytics:
+          url: "<CONTROLLER-EVENT-SERVICE-URL>"
+          globalAccountName: "<CONTROLLER-GLOBAL-ACCOUNT-NAME>"
+          apiKey:  "<CONTROLLER-EVENT-SERVICE-API-KEY>"
+          metricsTable: mdotelmetrics
+          logsTable: mdotellogs
+          initTable: false
+    connectors:
+      spanmetrics:
+        histogram:
+          disable: false
+          explicit:
+            buckets: [2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]
+        dimensions:
+        - name: http.method
+          default: GET
+        exemplars:
+          enabled: false
+        # exclude_dimensions: ['status.code']
+        dimensions_cache_size: 1000
+        aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"    
+        metrics_flush_interval: 60s
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug, spanmetrics]
+        metrics:
+          receivers: [spanmetrics]
+          exporters: [debug, appdynamics]
+      telemetry:
+        logs:
+          level: "debug"
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appdynamics-custom-collector
+  labels:
+    app: opentelemetry-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opentelemetry-collector
+  template:
+    metadata:
+      labels:
+        app: opentelemetry-collector
+    spec:
+      containers:
+      - name: otc-container
+        args:
+          - --config=/conf/config.yaml
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        image: docker.io/chrlic/otelcol-dev:0.117.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /conf
+          name: collector-config
+      volumes:
+      - name: collector-config
+        configMap:
+          name: appdynamics-custom-collector-config
+          defaultMode: 420
+          items:
+          - key: config.yaml
+            path: config.yaml
+
+---
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appdynamics-custom-collector
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 4317
+    protocol: TCP
+    targetPort: 4317
+    name: otel-grcp
+  - port: 4318
+    protocol: TCP
+    targetPort: 4318
+    name: otel-http
+  selector:
+    app: opentelemetry-collector 

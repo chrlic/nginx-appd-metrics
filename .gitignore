@@ -1,1 +1,3 @@
 nginx/auto/instrument/collector-my.yaml
+nginx/manual/collector/my-d-svc-collector.yaml
+nginx/manual/nginx/custHelm/*

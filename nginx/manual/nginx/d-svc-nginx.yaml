@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.24.0
+        ports:
+        - containerPort: 8765
+        env:
+          - name: LD_LIBRARY_PATH
+            value: /opt/opentelemetry-webserver/agent/sdk_lib/lib
+        volumeMounts:
+          - name: nginx-conf
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
+            readOnly: true
+          - name: otel-module
+            mountPath: /opt/opentelemetry-webserver
+            readOnly: false
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "1"
+            memory: 500Mi
+          requests:
+            cpu: 250m
+            memory: 100Mi
+      initContainers:
+      - name: otel-agent
+        image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-apache-httpd:1.0.4
+        command:
+          - /bin/sh
+          - '-c'
+        args: 
+          - >- 
+            mkdir /opt/opentelemetry/nginx-config &&
+            cp /opt/nginx-config/otel.conf /opt/opentelemetry/nginx-config/ && 
+            sed -i 's,<<K8S_POD_NAME>>,'${K8S_POD_NAME}',g' /opt/opentelemetry/nginx-config/otel.conf && 
+            sed -i 's,<<K8S_POD_NAMESPACE>>,'${K8S_POD_NAMESPACE}',g' /opt/opentelemetry/nginx-config/otel.conf && 
+            sed -i 's,<<K8S_DEPLOYMENT_NAME>>,'${K8S_DEPLOYMENT_NAME}',g' /opt/opentelemetry/nginx-config/otel.conf && 
+            mkdir /opt/opentelemetry-webserver/agent && 
+            mkdir /opt/opentelemetry-webserver/agent/logs &&
+            cp -r /opt/opentelemetry/* /opt/opentelemetry-webserver/agent && 
+            cat /opt/opentelemetry-webserver/agent/conf/opentelemetry_sdk_log4cxx.xml.template | sed 's,__agent_log_dir__,'/opt/opentelemetry-webserver/agent/logs',g'  > /opt/opentelemetry-webserver/agent/conf/opentelemetry_sdk_log4cxx.xml && 
+            chmod ogu+wrx /opt/opentelemetry-webserver/agent/*
+        env:
+        - name: K8S_DEPLOYMENT_NAME
+          value: nginx
+          # ^^^^^ this should correspond to deployment name ^^^^^
+        - name: K8S_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: K8S_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+          - name: otel-conf
+            mountPath: /opt/nginx-config/otel.conf
+            subPath: otel.conf
+            readOnly: true
+          - name: otel-module
+            mountPath: /opt/opentelemetry-webserver
+            readOnly: false
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: nginx-conf
+          items:
+            - key: nginx.conf
+              path: nginx.conf
+      - name: otel-conf
+        configMap:
+          name: otel-conf
+          items:
+            - key: otel.conf
+              path: otel.conf
+      - name: otel-module
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8765
+    protocol: TCP
+    targetPort: 8765
+  selector:
+    app: nginx 
